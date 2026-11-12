@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Giám sát MTCL Hưng Yên</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: header → (1) daily line chart → (2) month-to-date tiles → (3) stations failing KPI often → (4) yesterday's zero-score list → (5) VHKT rated N */
+:root{
+  color-scheme:light;
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#14202e; --muted:#5b6878; --line:#dde3ea; --grid:#e8edf2;
+  --accent:#0b5cad; --accent-soft:#dbe8f6;
+  --bad:#b4372b; --bad-soft:#f8e0dc; --good:#1f7a4d; --good-soft:#dcf1e5; --okcell:#b9dcc7; --thr:#c27a00;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  color-scheme:dark;--bg:#0f1620;--surface:#17212d;--ink:#e6edf5;--muted:#93a1b2;--line:#2a3747;--grid:#223040;
+  --accent:#6aa9ec;--accent-soft:#1d3550;--bad:#ef7a6c;--bad-soft:#4a2320;--good:#5cc98f;--good-soft:#173a29;--okcell:#24533a;--thr:#e9b55a;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:22px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.crumb{font-size:12px;color:var(--muted)}
+h1{font-size:26px;margin:4px 0 0;font-weight:700;text-wrap:balance}
+.lede{margin:6px 0 0;color:var(--muted);max-width:75ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:14px;align-content:start;min-width:0}
+.head{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between}
+h2{font-size:16px;margin:0;font-weight:600}
+h3{font-size:13px;margin:0;font-weight:600;color:var(--muted)}
+.src{font-size:12px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--muted);font-family:var(--f-num);font-size:11px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);padding:8px 10px;border-radius:6px;font-size:12px;line-height:1.45;white-space:nowrap;transform:translate(-50%,-100%);margin-top:-12px;z-index:2}
+.tip b{font-family:var(--f-num)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:0;border-top:2.5px solid var(--accent)} .sw.t{border-top:2px dashed var(--thr)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--bad)}
+.sq{width:11px;height:11px;border-radius:2px;display:inline-block}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;gap:2px}
+.tile .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.tile .val{font-size:24px;font-weight:600}
+.tile .sub{font-size:12px;color:var(--muted)}
+.tile.lead{background:var(--good-soft);border-color:var(--good)} .tile.lead .val,.tile.lead .sub{color:var(--good)}
+.tile.leadbad{background:var(--bad-soft);border-color:var(--bad)} .tile.leadbad .val,.tile.leadbad .sub{color:var(--bad)}
+.tile.alert{background:var(--bad-soft);border-color:var(--bad)} .tile.alert .val{color:var(--bad)}
+.minis{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.mini{display:grid;gap:8px;align-content:start}
+.vbars{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;height:130px}
+.vbars .c{display:grid;grid-template-rows:auto 1fr auto;height:100%;gap:2px;text-align:center;font-size:10.5px;font-family:var(--f-num)}
+.vbars .c .w{display:flex;align-items:flex-end;height:100%}
+.vbars .c .b{width:100%;background:var(--bad);border-radius:3px 3px 0 0;min-height:2px}
+.vbars .c .t{color:var(--ink)} .vbars .c .l{color:var(--muted)}
+.vbars.dist .c .b{background:var(--thr)} .vbars.dist .c.hot .b{background:var(--bad)}
+.hbars{display:grid;gap:4px}
+.hb{display:grid;grid-template-columns:118px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:12.5px}
+.hb .tr{height:11px;position:relative}.hb .f{position:absolute;inset:0 auto 0 0;background:var(--bad);border-radius:3px;min-width:2px}
+.hb .v{text-align:right}
+/* group box: the group label sits on the box's border and the box wraps its indicators */
+.gbox{position:relative;border:1.5px solid var(--accent);border-radius:10px;padding:16px 10px 10px;margin-top:9px;min-width:0}
+.gbox.on{border-color:var(--bad);background:var(--bad-soft)}
+.gbox.col{display:grid;gap:4px}
+.gchip,.gname{position:absolute;top:0;left:10px;transform:translateY(-50%);padding:1px 10px;border-radius:999px;font:inherit;font-size:12px;font-weight:700;
+  background:var(--surface);color:var(--accent);border:1.5px solid var(--accent);line-height:1.5}
+.gchip{cursor:pointer}
+.gchip:hover,.gchip:focus-visible{background:var(--accent-soft);outline:none}
+.gbox.on .gchip{background:var(--bad);border-color:var(--bad);color:var(--surface)}
+.ginner{display:flex;flex-wrap:wrap;gap:6px}
+.hg{display:flex;justify-content:flex-end;gap:8px;font-size:12px;margin-bottom:2px}
+.hg .num{color:var(--muted)}
+.hbars{gap:8px!important}
+#mchips,#kchips{display:flex!important;flex-wrap:wrap;gap:10px 14px;align-items:stretch}
+.tools{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.tools input,.tools select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.tools input{flex:1 1 200px}
+.fchip{padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:12px;cursor:pointer}
+.fchip[aria-pressed="true"]{background:var(--bad-soft);border-color:var(--bad);color:var(--bad);font-weight:600}
+.fchip:focus-visible,.tools input:focus-visible,.tools select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.count{font-size:13px;color:var(--muted);margin-left:auto}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:700px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;white-space:nowrap}
+td.n,th.n{text-align:right}
+.site{font-weight:600}
+.strip{display:flex;gap:2px}
+.strip i{width:13px;height:13px;border-radius:2px;background:var(--grid)}
+.strip i.z{background:var(--bad)} .strip i.o{background:var(--okcell)}
+.days{font-weight:600} .days.hi{color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{padding:1px 7px;border-radius:4px;font-size:12px;white-space:nowrap;background:var(--bad-soft);color:var(--bad);font-weight:600}
+.chip b{font-family:var(--f-num);font-weight:500}
+.low{color:var(--bad);font-weight:600}
+.empty{display:flex;gap:12px;align-items:center;padding:14px 16px;border-radius:8px;background:var(--good-soft);color:var(--good);font-weight:500}
+.empty::before{content:"✓";font-size:18px;font-weight:700}
+details summary{cursor:pointer;color:var(--accent);font-size:13px}
+details[open] summary{margin-bottom:8px}
+footer{font-size:12px;color:var(--muted);display:grid;gap:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="crumb" id="crumb"></div>
+    <h1 id="h1"></h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section class="card" id="daily">
+    <div class="head"><h2 id="dailyTitle"></h2><span class="src">TỈNH_THÀNH PHỐ › Ngày</span></div>
+    <div class="legend"><span><i class="sw"></i>MTCL_2026</span><span><i class="sw t"></i><span id="thrLegend"></span></span><span><i class="dot"></i>Ngày dưới ngưỡng</span></div>
+    <div class="chart" id="chart"></div>
+    <p class="note" id="dailyNote"></p>
+  </section>
+
+  <section class="card" id="month">
+    <div class="head"><h2 id="monthTitle"></h2><span class="src">TỈNH_THÀNH PHỐ › Tháng</span></div>
+    <div class="tiles" id="tiles"></div>
+    <p class="note" id="rankNote"></p>
+  </section>
+
+  <section class="card" id="kpiMonth">
+    <div class="head"><h2>Trạm thường xuyên không đạt KPI trong tháng</h2><span class="src" id="kmSrc"></span></div>
+    <p class="note" id="kmDef"></p>
+    <div class="tiles" id="mtiles"></div>
+    <div class="minis">
+      <div class="mini"><h3>Số trạm không đạt mỗi ngày</h3><div class="vbars" id="dayBars"></div></div>
+      <div class="mini"><h3>Phân bố theo số ngày không đạt (số trạm)</h3><div class="vbars dist" id="distBars"></div></div>
+      <div class="mini"><h3>Chỉ tiêu gây điểm 0 (lượt trạm-ngày)</h3><div class="hbars" id="indBars"></div></div>
+    </div>
+    <div class="tools">
+      <input type="search" id="mq" placeholder="Tìm mã trạm hoặc xã/phường…" aria-label="Tìm trạm">
+      <label for="mmin" class="note">Số ngày không đạt</label>
+      <select id="mmin"></select>
+      <span class="count" id="mcount"></span>
+    </div>
+    <div id="mchips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    <div class="legend"><span><i class="sq" style="background:var(--bad)"></i>Ngày không đạt</span><span><i class="sq" style="background:var(--okcell)"></i>Ngày đạt</span><span><i class="sq" style="background:var(--grid)"></i>Không có số liệu</span></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Trạm</th><th>Xã/Phường</th><th class="n">Số ngày</th><th id="stripHead"></th><th class="n">MTCL TB</th><th>Chỉ tiêu bị điểm 0 (số ngày)</th></tr></thead>
+      <tbody id="mtb"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="kpi0">
+    <div class="head"><h2 id="kpi0Title"></h2><span class="src">TRẠM › KPI › Ngày</span></div>
+    <p class="note" id="kpiNote"></p>
+    <div class="tools">
+      <input type="search" id="kq" placeholder="Tìm mã trạm hoặc xã/phường…" aria-label="Tìm trạm hôm qua">
+      <span class="count" id="kcount"></span>
+    </div>
+    <div id="kchips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Trạm</th><th>Xã/Phường</th><th class="n">MTCL_2026</th><th class="n">Ngày không đạt trong tháng</th><th>Chỉ tiêu điểm 0 (giá trị thực)</th></tr></thead>
+      <tbody id="ktb"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="vhktN">
+    <div class="head"><h2 id="vhTitle"></h2><span class="src">TRẠM › VHKT › Ngày</span></div>
+    <div id="vbody"></div>
+    <details id="vall"><summary></summary><div class="tbl"><table>
+      <thead><tr><th>Cell/Trạm</th><th>Xã/Phường</th><th>Mạng</th><th>Bắt đầu</th><th>Kết thúc</th><th class="n">Phút</th><th>Ưu tiên</th><th>Tổ xử lý</th><th>Đánh giá</th></tr></thead>
+      <tbody id="vtb"></tbody>
+    </table></div></details>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script id="data" type="application/json">{"tinh":"Hung Yen","nguong":95.5,"taoLuc":"12/11/2026 17:21","daily":[{"date":"01/11/2026","m":95.33,"x":98.08,"k":98.85,"q":98.53,"v":90.2,"e":"KHONG DAT"},{"date":"02/11/2026","m":99.45,"x":98.08,"k":99.3,"q":98.67,"v":100,"e":"DAT"},{"date":"03/11/2026","m":99.4,"x":99.04,"k":99.21,"q":98.57,"v":100,"e":"DAT"},{"date":"04/11/2026","m":99.48,"x":99.04,"k":99.32,"q":98.77,"v":100,"e":"DAT"},{"date":"05/11/2026","m":99.36,"x":100,"k":99.13,"q":98.53,"v":100,"e":"DAT"},{"date":"06/11/2026","m":99.47,"x":100,"k":99.39,"q":98.58,"v":100,"e":"DAT"},{"date":"07/11/2026","m":88.84,"x":99.04,"k":98.85,"q":98.51,"v":74,"e":"KHONG DAT"},{"date":"08/11/2026","m":97.16,"x":98.08,"k":98.53,"q":98.32,"v":95.2,"e":"DAT"},{"date":"09/11/2026","m":99.16,"x":97.12,"k":98.68,"q":98.46,"v":100,"e":"DAT"},{"date":"10/11/2026","m":99.29,"x":99.04,"k":98.93,"q":98.59,"v":100,"e":"DAT"},{"date":"11/11/2026","m":99.32,"x":100,"k":98.6,"q":99.41,"v":100,"e":"DAT"}],"month":{"thang":"11/2026","m":97.84,"e":"DAT","x":99.04,"k":98.98,"q":98.63,"v":96.31,"a":0,"n":104,"rank":null},"kpi":{"days":["01/11/2026","02/11/2026","03/11/2026","04/11/2026","05/11/2026","06/11/2026","07/11/2026","08/11/2026","09/11/2026","10/11/2026","11/11/2026"],"total":773,"dayZero":[49,35,31,26,38,35,54,47,48,44,46],"dayInd":{"CSSR":[8,10,5,2,5,11,7,2,7,8,5],"PASR":[7,5,6,3,6,10,9,12,9,8,12],"CDR":[8,10,8,10,15,9,11,13,7,9,5],"PADR":[1,2,4,4,4,3,4,3,3,5,5],"HOSR":[0,0,0,2,0,0,1,1,1,1,2],"PRB_DL":[2,0,1,1,3,0,3,0,3,2,1],"DKD":[29,10,8,8,8,4,21,22,20,14,20],"USR_DL_THP_4G":[0,0,0,1,0,0,0,0,0,0,0]},"st":[{"s":"HYNHCG02","x":"Hiep Cuong","n":11,"st":"00000000000","m":[85.4,86,86,84.8,86,86,86,86,84.8,86,86],"ind":{"DKD":11},"last":{"DKD":93.85}},{"s":"HYNNTU02","x":"Nghia Tru","n":11,"st":"00000000000","m":[74.3,89.5,86.5,85.3,77.8,74.8,77.8,85.3,86.5,86.5,79],"ind":{"PASR":4,"PADR":11,"DKD":1},"last":{"PASR":98.65,"PADR":1.15}},{"s":"HYNTTN02","x":"Tay Thai Ninh","n":11,"st":"00000000000","m":[84.8,88.8,93,93,83,90,91.8,93,93,93,93],"ind":{"CSSR":11,"CDR":2},"last":{"CSSR":97.6}},{"s":"HYNYMY14","x":"Yen My","n":11,"st":"00000000000","m":[91.8,91.2,91.8,91.8,91.8,91.2,91.8,81.3,91.8,81.3,81.3],"ind":{"CSSR":11,"PASR":3},"last":{"CSSR":98.19,"PASR":96.52}},{"s":"HYNDHO20","x":"Duong Hao","n":9,"st":"01000100000","m":[93,96.5,93,93,93,96.5,91.8,82.5,93,93,91.8],"ind":{"PRB_DL":8,"DKD":1},"last":{"PRB_DL":97.55}},{"s":"HYNTTH01","x":"Tay Tien Hai","n":8,"st":"10000000110","m":[100,89.5,89.5,89.5,88.9,89.5,89.5,89.5,98.2,100,89.5],"ind":{"PADR":8},"last":{"PADR":0.94}},{"s":"HYNHCU03","x":"Hong Chau","n":7,"st":"00000111100","m":[86,86,86,85.4,86,100,100,100,100,86,86],"ind":{"DKD":7},"last":{"DKD":93.49}},{"s":"HYNKCU05","x":"Khoai Chau","n":7,"st":"01011010000","m":[90.6,99.4,93,97.6,98.8,93,98.2,90,84.2,70.8,92.4],"ind":{"CDR":6,"CSSR":1,"DKD":2},"last":{"CDR":0.55}},{"s":"HYNCMH03","x":"Chi Minh","n":5,"st":"01111100010","m":[86,99.4,100,100,100,100,86.5,89.5,74.8,100,86],"ind":{"DKD":3,"CDR":1,"PASR":2},"last":{"DKD":99.12}},{"s":"HYNDTH03","x":"Dong Tien Hung","n":5,"st":"00011101011","m":[85.4,78.4,86,100,98.8,100,86,100,84.8,98.8,100],"ind":{"DKD":5,"CDR":1},"last":{}},{"s":"HYNHQG04","x":"Hong Quang","n":5,"st":"11011001001","m":[98.2,98.8,88.3,97.6,98.8,88.3,84.8,98.8,88.3,88.3,98.8],"ind":{"PADR":4,"DKD":1},"last":{}},{"s":"HYNMHO06","x":"My Hao","n":5,"st":"11100011010","m":[100,100,100,75.5,89.5,89.5,100,96.5,89.5,100,89.5],"ind":{"PASR":5,"DKD":1},"last":{"PASR":97.25}},{"s":"HYNNTN05","x":"Nam Thai Ninh","n":5,"st":"00010011111","m":[93,91.8,93,100,93,91.8,100,100,100,100,100],"ind":{"CSSR":5},"last":{}},{"s":"HYNNTU30","x":"Nghia Tru","n":5,"st":"11111010000","m":[100,100,100,100,99.4,89.5,100,89.5,89.5,89.5,89.5],"ind":{"PASR":5},"last":{"PASR":98.14}},{"s":"HYNNVL07","x":"Nguyen Van Linh","n":5,"st":"---00001110","m":[null,null,null,55.3,74.3,84.8,91.2,100,98.8,98.2,86],"ind":{"DKD":4,"CDR":1,"PADR":2,"HOSR":1,"USR_DL_THP_4G":1},"last":{"DKD":97.63}},{"s":"HYNPDC05","x":"Phu Duc","n":5,"st":"10011011100","m":[100,88.9,89.5,100,100,87.7,100,100,100,89.5,89.5],"ind":{"PASR":5},"last":{"PASR":97.96}},{"s":"HYNQAN01","x":"Quynh An","n":5,"st":"00011111010","m":[89.5,89.5,89.5,100,98.8,100,100,100,89.5,100,89.5],"ind":{"PASR":5},"last":{"PASR":98.57}},{"s":"HYNTLA03","x":"Tien La","n":5,"st":"11010100011","m":[100,98.8,88.3,100,88.3,98.8,88.3,87.7,88.3,100,99.4],"ind":{"PADR":5},"last":{}},{"s":"HYNHLG03","x":"Hoan Long","n":4,"st":"10011101110","m":[96.4,89.4,91.8,98.8,98.8,98.8,91.8,98.8,98.8,97.6,93],"ind":{"CDR":3,"CSSR":1},"last":{"CDR":0.76}},{"s":"HYNHQG03","x":"Hong Quang","n":4,"st":"11001101011","m":[99.4,99.4,92.4,93,100,100,92.4,99.4,93,100,100],"ind":{"CSSR":1,"CDR":3},"last":{}},{"s":"HYNKXG01","x":"Kien Xuong","n":4,"st":"11000101111","m":[100,100,93,92.4,93,99.4,93,100,100,100,100],"ind":{"CDR":4},"last":{}},{"s":"HYNLDO09","x":"Lac Dao","n":4,"st":"11111100010","m":[98.8,98.8,100,98.8,100,100,92.4,86,84.8,100,79],"ind":{"HOSR":1,"DKD":3,"CDR":1},"last":{"HOSR":95.61,"DKD":77.81}},{"s":"HYNMHO02","x":"My Hao","n":4,"st":"10011101101","m":[100,89.5,89.5,100,100,100,88.9,100,100,89.5,100],"ind":{"PASR":4},"last":{}},{"s":"HYNPCG17","x":"Phung Cong","n":4,"st":"01111100101","m":[81.3,94.7,95.9,98.2,98.8,100,91.8,89.5,99.4,91.8,100],"ind":{"PRB_DL":2,"PASR":2,"CSSR":1},"last":{}},{"s":"HYNTHA05","x":"Tien Hoa","n":4,"st":"00001111111","m":[74.3,84.8,84.8,86,100,100,100,98.2,100,100,100],"ind":{"DKD":4,"PASR":1},"last":{}},{"s":"HYNTTN03","x":"Tay Thai Ninh","n":4,"st":"00011111011","m":[84.8,86,86,99.4,100,100,100,99.4,91.8,99.4,100],"ind":{"CDR":1,"DKD":3},"last":{}},{"s":"HYNTTR05","x":"Tong Tran","n":4,"st":"11111011000","m":[97.6,98.8,97,100,98.8,93,98.8,95.8,88.3,88.3,89.5],"ind":{"PASR":3,"CSSR":1},"last":{"PASR":97.92}},{"s":"HYNTVV04","x":"Trieu Viet Vuong","n":4,"st":"11110011001","m":[98.8,95.8,100,98.8,91.8,89.4,100,99.4,91.2,91.8,100],"ind":{"CSSR":1,"CDR":3},"last":{}},{"s":"HYNAQC05","x":"Ai Quoc","n":3,"st":"11001101111","m":[100,100,89.5,88.9,100,100,89.5,100,98.2,100,100],"ind":{"PASR":3},"last":{}},{"s":"HYNBNN01","x":"Binh Nguyen","n":3,"st":"11111110100","m":[100,100,100,100,100,100,100,93,100,86,86],"ind":{"DKD":2,"CDR":1},"last":{"DKD":98.79}},{"s":"HYNCMH04","x":"Chi Minh","n":3,"st":"01111111001","m":[91.8,100,100,98.8,98.8,100,100,98.8,86,86,100],"ind":{"DKD":2,"CSSR":1},"last":{}},{"s":"HYNCNH01","x":"Chau Ninh","n":3,"st":"01111011101","m":[90.6,97.6,100,100,97.6,88.8,99.4,98.8,98.8,91.8,98.8],"ind":{"CSSR":3},"last":{}},{"s":"HYNDTN03","x":"Dong Thai Ninh","n":3,"st":"11111000111","m":[100,100,100,100,100,86,86,77.8,100,99.4,100],"ind":{"HOSR":1,"DKD":3},"last":{}},{"s":"HYNHCU02","x":"Hong Chau","n":3,"st":"11111001110","m":[99.4,100,100,99.4,99.4,88.9,89.5,100,100,100,86],"ind":{"DKD":1,"PASR":2},"last":{"DKD":98.43}},{"s":"HYNHPU01","x":"Hung Phu","n":3,"st":"11101101011","m":[100,100,100,84.8,100,100,91.8,100,91.8,100,96.4],"ind":{"HOSR":3,"CDR":1},"last":{}},{"s":"HYNKCU01","x":"Khoai Chau","n":3,"st":"01111011101","m":[93,100,100,100,100,93,100,100,100,91.8,98.8],"ind":{"CDR":3},"last":{}},{"s":"HYNKCU03","x":"Khoai Chau","n":3,"st":"01111100111","m":[77.8,100,100,98.8,100,100,84.8,86,98.8,100,98.8],"ind":{"DKD":3,"CDR":1},"last":{}},{"s":"HYNLLI04","x":"Le Loi","n":3,"st":"00111111110","m":[86,86,100,99.4,100,100,98.8,100,100,100,93],"ind":{"CSSR":1,"DKD":2},"last":{"CSSR":98.63}},{"s":"HYNNLM02","x":"Ngoc Lam","n":3,"st":"10110111011","m":[100,93,100,100,93,100,100,100,93,100,100],"ind":{"CSSR":2,"CDR":1},"last":{}},{"s":"HYNNQH15","x":"Nhu Quynh","n":3,"st":"01110111110","m":[85.4,100,100,100,86,100,100,100,100,100,86],"ind":{"DKD":3},"last":{"DKD":94.21}},{"s":"HYNNQH16","x":"Nhu Quynh","n":3,"st":"01111101011","m":[84.8,98.8,98.8,98.8,95.8,95.2,84.8,98.8,84.8,98.8,100],"ind":{"DKD":3},"last":{}},{"s":"HYNNTU01","x":"Nghia Tru","n":3,"st":"11110101110","m":[95.9,94.7,95.3,95.9,92.4,94.1,91.8,94.7,94.1,94.1,82.5],"ind":{"DKD":1,"PRB_DL":2},"last":{"DKD":94.66}},{"s":"HYNPCG02","x":"Phung Cong","n":3,"st":"11111110010","m":[100,99.4,99.4,98.8,99.4,99.4,100,88.9,88.9,98.8,88.3],"ind":{"PASR":3},"last":{"PASR":98.86}},{"s":"HYNSNM08","x":"Son Nam","n":3,"st":"11101111100","m":[100,100,100,89.5,100,100,100,100,96.5,89.5,89.5],"ind":{"PADR":3},"last":{"PADR":0.99}},{"s":"HYNTLM26","x":"Tran Lam","n":3,"st":"11101001111","m":[100,100,100,89.5,100,89.5,89.5,100,100,100,100],"ind":{"PASR":3},"last":{}},{"s":"HYNTLU02","x":"Tien Lu","n":3,"st":"01111111010","m":[85.4,100,100,100,100,100,100,100,89.5,100,89.5],"ind":{"PASR":2,"DKD":1},"last":{"PASR":98.74}},{"s":"HYNTVV05","x":"Trieu Viet Vuong","n":3,"st":"11110010111","m":[97.6,98.8,98.8,98.2,91.2,90.6,97.6,91.2,98.2,98.8,99.4],"ind":{"CDR":3},"last":{}},{"s":"HYNAQC04","x":"Ai Quoc","n":2,"st":"11111111001","m":[100,100,100,100,100,100,100,99.4,85.4,86,100],"ind":{"DKD":2},"last":{}},{"s":"HYNBIT02","x":"Binh Thanh","n":2,"st":"10111101111","m":[100,93,100,100,100,100,90,98.8,100,100,100],"ind":{"CDR":1,"CSSR":1},"last":{}},{"s":"HYNBTN01","x":"Bac Thai Ninh","n":2,"st":"01110111111","m":[84.2,98.8,100,100,91.8,98.8,100,98.8,100,99.4,100],"ind":{"CDR":1,"DKD":1},"last":{}},{"s":"HYNCMH01","x":"Chi Minh","n":2,"st":"01111111110","m":[86,100,100,100,99.4,100,100,100,100,98.8,86],"ind":{"DKD":2},"last":{"DKD":97.65}},{"s":"HYNDDG01","x":"Dai Dong","n":2,"st":"11111110011","m":[98.8,99.4,99.4,100,100,100,99.4,84.8,86,99.4,100],"ind":{"DKD":2},"last":{}},{"s":"HYNDDG05","x":"Dai Dong","n":2,"st":"10111101111","m":[98.8,88.8,98.8,98.8,98.8,98.8,91.8,100,98.8,98.8,100],"ind":{"CSSR":1,"CDR":1},"last":{}},{"s":"HYNDHG03","x":"Dong Hung","n":2,"st":"11110011111","m":[100,100,98.8,100,92.4,93,100,98.8,100,100,100],"ind":{"CDR":2},"last":{}},{"s":"HYNDHO11","x":"Duong Hao","n":2,"st":"01111110111","m":[86,100,100,100,100,100,100,86,100,100,98.8],"ind":{"DKD":2},"last":{}},{"s":"HYNDHO14","x":"Duong Hao","n":2,"st":"11111110011","m":[100,100,98.8,100,100,98.8,98.8,84.2,84.8,100,99.4],"ind":{"DKD":2},"last":{}},{"s":"HYNDTA02","x":"Dong Thuy Anh","n":2,"st":"11111011101","m":[100,100,100,100,100,91.8,98.2,98.8,100,91.8,100],"ind":{"CDR":2},"last":{}},{"s":"HYNDTI03","x":"Dong Tien Hai","n":2,"st":"11111110101","m":[100,100,100,100,100,100,100,89.5,100,88.3,100],"ind":{"PASR":2},"last":{}},{"s":"HYNDTN02","x":"Dong Thai Ninh","n":2,"st":"11111100111","m":[100,100,100,100,100,100,86,84.8,100,99.4,100],"ind":{"DKD":2},"last":{}},{"s":"HYNHMH04","x":"Hong Minh","n":2,"st":"10110111111","m":[100,93,100,100,93,100,100,100,100,100,100],"ind":{"CDR":2},"last":{}},{"s":"HYNKCU04","x":"Khoai Chau","n":2,"st":"11110111101","m":[100,100,100,100,93,100,98.8,98.8,98.8,91.8,98.8],"ind":{"CDR":2},"last":{}},{"s":"HYNLDO01","x":"Lac Dao","n":2,"st":"11111110011","m":[100,99.4,100,100,99.4,100,99.4,86,84.8,100,100],"ind":{"DKD":2},"last":{}},{"s":"HYNLQD03","x":"Le Quy Don","n":2,"st":"11111111100","m":[100,100,100,100,100,100,100,100,100,89.5,89.5],"ind":{"PASR":2},"last":{"PASR":96.85}},{"s":"HYNMHO05","x":"My Hao","n":2,"st":"11111110011","m":[98.8,98.8,98.8,98.8,98.8,98.8,98.8,91.8,91.8,100,100],"ind":{"CDR":2},"last":{}},{"s":"HYNMSO03","x":"Me So","n":2,"st":"11110111101","m":[98.8,97.6,97,98.8,84.2,98.8,98.8,100,98.2,84.2,98.8],"ind":{"DKD":2},"last":{}},{"s":"HYNMSO04","x":"Me So","n":2,"st":"11111011101","m":[100,100,100,100,100,89.5,99.4,100,100,86,99.4],"ind":{"DKD":1,"PASR":1},"last":{}},{"s":"HYNNDH02","x":"Nam Dong Hung","n":2,"st":"11111101110","m":[100,100,100,100,100,100,93,100,100,99.4,85.4],"ind":{"DKD":1,"CSSR":1},"last":{"DKD":99.17}},{"s":"HYNNDH05","x":"Nam Dong Hung","n":2,"st":"11111011101","m":[100,100,97,100,100,92.4,100,100,100,86,100],"ind":{"DKD":1,"CSSR":1},"last":{}},{"s":"HYNNDN06","x":"Nghia Dan","n":2,"st":"10111110111","m":[98.8,85.3,95.8,98.8,98.8,98.8,98.8,78.3,98.8,98.8,98.8],"ind":{"PASR":2,"CDR":1},"last":{}},{"s":"HYNNDN07","x":"Nghia Dan","n":2,"st":"11111100111","m":[100,99.4,100,100,100,100,89.5,86.5,100,100,100],"ind":{"PASR":2},"last":{}},{"s":"HYNNLM01","x":"Ngoc Lam","n":2,"st":"11111111100","m":[98.8,100,100,100,100,100,100,100,100,89.5,89.5],"ind":{"PADR":2},"last":{"PADR":0.69}},{"s":"HYNNQH01","x":"Nhu Quynh","n":2,"st":"01101111111","m":[91.8,95.8,98.8,91.8,98.8,98.8,95.8,98.8,98.8,98.8,98.8],"ind":{"CDR":2},"last":{}},{"s":"HYNNQH14","x":"Nhu Quynh","n":2,"st":"11111111100","m":[100,100,100,100,100,100,100,100,100,93,93],"ind":{"HOSR":2},"last":{"HOSR":92.47}},{"s":"HYNNTG01","x":"Nam Tien Hung","n":2,"st":"01110111111","m":[91.2,100,98.2,98.8,92.4,98.2,98.8,98.8,98.8,98.8,99.4],"ind":{"CDR":2},"last":{}},{"s":"HYNNTG02","x":"Nam Tien Hung","n":2,"st":"11010111111","m":[100,99.4,89.5,100,89.5,100,100,100,100,100,100],"ind":{"PASR":2},"last":{}},{"s":"HYNNTI05","x":"Nguyen Trai","n":2,"st":"01111111011","m":[86,100,100,100,100,100,100,100,82.4,100,100],"ind":{"DKD":2},"last":{}},{"s":"HYNNTU11","x":"Nghia Tru","n":2,"st":"11100111111","m":[100,98.8,100,84.8,85.4,98.2,100,98.8,100,100,100],"ind":{"DKD":2},"last":{}},{"s":"HYNNTU19","x":"Nghia Tru","n":2,"st":"11111110110","m":[100,100,100,100,100,100,100,89.5,100,100,86],"ind":{"DKD":1,"PASR":1},"last":{"DKD":95.12}},{"s":"HYNNTU23","x":"Nghia Tru","n":2,"st":"11111111100","m":[95.8,98.8,95.8,98.8,95.8,98.8,98.8,95.8,98.8,85.3,88.3],"ind":{"PADR":2},"last":{"PADR":0.94}},{"s":"HYNNVL05","x":"Nguyen Van Linh","n":2,"st":"11111111001","m":[100,100,100,100,100,100,100,98.8,92.4,85.4,100],"ind":{"DKD":1,"CSSR":1},"last":{}},{"s":"HYNPCG10","x":"Phung Cong","n":2,"st":"11011110111","m":[100,99.4,92.4,100,98.8,100,100,91.8,97,97.6,100],"ind":{"CDR":2},"last":{}},{"s":"HYNPHN07","x":"Pho Hien","n":2,"st":"11111111100","m":[100,100,98.8,100,100,99.4,98.8,100,100,86,86],"ind":{"DKD":2},"last":{"DKD":93.49}},{"s":"HYNQAN05","x":"Quynh An","n":2,"st":"01111011111","m":[88.9,98.8,100,100,100,81.9,99.4,100,100,100,100],"ind":{"PASR":2,"CDR":1},"last":{}},{"s":"HYNQHG01","x":"Quang Hung","n":2,"st":"11111001111","m":[100,100,98.8,100,98.8,93,86,100,98.8,100,100],"ind":{"DKD":1,"CSSR":1},"last":{}},{"s":"HYNQPU04","x":"Quynh Phu","n":2,"st":"10111111101","m":[97,90,97,98.2,100,100,100,100,98.8,89.5,100],"ind":{"PASR":1,"CDR":1},"last":{}},{"s":"HYNQPU05","x":"Quynh Phu","n":2,"st":"11111101101","m":[100,100,100,100,99.4,100,92.4,100,98.2,91.8,100],"ind":{"CSSR":2},"last":{}},{"s":"HYNTHA01","x":"Tien Hoa","n":2,"st":"10111110111","m":[100,93,100,100,100,100,100,86,100,100,100],"ind":{"DKD":1,"CDR":1},"last":{}},{"s":"HYNTHA04","x":"Tien Hoa","n":2,"st":"11111110110","m":[98.8,100,97,100,100,100,100,84.8,98.8,100,93],"ind":{"CSSR":1,"DKD":1},"last":{"CSSR":98}},{"s":"HYNTHD16","x":"Tran Hung Dao","n":2,"st":"11111111100","m":[100,99.4,100,100,99.4,100,100,100,100,86,86],"ind":{"DKD":2},"last":{"DKD":99.16}},{"s":"HYNTHD18","x":"Tran Hung Dao","n":2,"st":"11110011111","m":[100,100,100,96.5,89.5,88.9,100,100,100,100,96.5],"ind":{"PASR":2},"last":{}},{"s":"HYNTHU01","x":"Tan Hung","n":2,"st":"00111111111","m":[86,86,98.8,100,100,100,100,98.8,100,100,100],"ind":{"DKD":2},"last":{}},{"s":"HYNTLU07","x":"Tien Lu","n":2,"st":"10111110111","m":[100,93,100,100,100,100,100,86,100,100,100],"ind":{"DKD":1,"CSSR":1},"last":{}},{"s":"HYNTVV02","x":"Trieu Viet Vuong","n":2,"st":"11011011111","m":[95.8,98.8,91.8,97.6,98.8,90.6,98.2,96.4,98.8,97.6,98.8],"ind":{"CDR":2},"last":{}},{"s":"HYNVPC10","x":"Vu Phuc","n":2,"st":"11100111111","m":[100,100,100,86,86,100,100,100,98.8,97,100],"ind":{"DKD":2},"last":{}},{"s":"HYNVXN03","x":"Van Xuan","n":2,"st":"11111010111","m":[98.8,100,100,98.8,99.4,93,98.8,91.8,98.8,99.4,98.8],"ind":{"CDR":1,"CSSR":1},"last":{}},{"s":"HYNASO04","x":"A Sao","n":1,"st":"11111111110","m":[95.8,100,100,100,100,100,97,100,98.8,100,86],"ind":{"DKD":1},"last":{"DKD":98}},{"s":"HYNATI06","x":"An Thi","n":1,"st":"11111011111","m":[100,98.8,98.8,98.8,100,93,100,98.8,100,97,98.8],"ind":{"CSSR":1},"last":{}},{"s":"HYNBDQ03","x":"Bac Dong Quan","n":1,"st":"11111101111","m":[100,100,100,100,100,100,86,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNBDQ04","x":"Bac Dong Quan","n":1,"st":"11111110111","m":[100,97,100,100,100,100,100,93,98.8,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNBID01","x":"Binh Dinh","n":1,"st":"11111101111","m":[98.8,100,100,100,100,100,89.5,100,100,100,100],"ind":{"PADR":1},"last":{}},{"s":"HYNBTA01","x":"Bac Thuy Anh","n":1,"st":"11111101111","m":[99.4,100,99.4,100,99.4,100,84.8,100,100,97.6,100],"ind":{"DKD":1},"last":{}},{"s":"HYNBTN02","x":"Bac Thai Ninh","n":1,"st":"10111111111","m":[100,86,100,98.8,100,100,100,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNCNH02","x":"Chau Ninh","n":1,"st":"11111101111","m":[99.4,100,98.8,98.8,100,98.8,84.8,98.8,100,98.8,100],"ind":{"DKD":1},"last":{}},{"s":"HYNDCU02","x":"Dong Chau","n":1,"st":"11111110111","m":[100,99.4,100,100,99.4,100,100,86,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNDCU07","x":"Dong Chau","n":1,"st":"11111110111","m":[100,100,100,100,100,100,100,86,98.2,98.8,100],"ind":{"DKD":1},"last":{}},{"s":"HYNDDG02","x":"Dai Dong","n":1,"st":"11111011111","m":[98.8,98.8,99.4,100,100,93,97.6,98.8,98.8,97.6,99.4],"ind":{"CSSR":1},"last":{}},{"s":"HYNDDG03","x":"Dai Dong","n":1,"st":"11111111011","m":[100,100,100,100,100,100,100,100,93,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDHA02","x":"Dien Ha","n":1,"st":"11111111110","m":[100,100,100,100,100,98.8,100,100,98.8,100,79],"ind":{"CDR":1,"DKD":1},"last":{"CDR":0.77,"DKD":90.97}},{"s":"HYNDHG07","x":"Dong Hung","n":1,"st":"01111111111","m":[93,100,100,100,100,100,100,100,99.4,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDHO02","x":"Duong Hao","n":1,"st":"11111110111","m":[100,100,100,99.4,98.8,100,98.8,88.3,100,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNDHO06","x":"Duong Hao","n":1,"st":"10111111111","m":[95.3,89.5,95.9,95.9,95.3,95.3,95.3,96.5,100,96.5,95.9],"ind":{"CSSR":1},"last":{}},{"s":"HYNDHO09","x":"Duong Hao","n":1,"st":"11111111011","m":[98.8,100,96.5,100,100,100,100,100,86,100,96.5],"ind":{"DKD":1},"last":{}},{"s":"HYNDHO10","x":"Duong Hao","n":1,"st":"11111110111","m":[99.4,100,100,99.4,100,100,100,91.8,98.8,98.2,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDHO19","x":"Duong Hao","n":1,"st":"11111110111","m":[95.8,100,97,98.8,98.8,95.8,100,72.5,100,98.8,100],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNDTA03","x":"Dong Thuy Anh","n":1,"st":"11111110111","m":[100,100,100,100,100,100,100,93,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDTA07","x":"Dong Thuy Anh","n":1,"st":"11011111111","m":[98.8,100,93,99.4,99.4,98.8,94.6,99.4,100,100,99.4],"ind":{"CDR":1},"last":{}},{"s":"HYNDTI05","x":"Dong Tien Hai","n":1,"st":"01111111111","m":[93,100,100,100,100,100,99.4,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDTI06","x":"Dong Tien Hai","n":1,"st":"11111101111","m":[98.2,100,100,100,98.8,100,91.2,100,98.8,98.8,100],"ind":{"CDR":1},"last":{}},{"s":"HYNDTI07","x":"Dong Tien Hai","n":1,"st":"11111111110","m":[100,100,100,100,100,100,100,100,100,100,89.5],"ind":{"PASR":1},"last":{"PASR":98.69}},{"s":"HYNDTN04","x":"Dong Thai Ninh","n":1,"st":"01111111111","m":[86,100,100,98.8,100,100,100,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNDUH01","x":"Duc Hop","n":1,"st":"11110111111","m":[99.4,100,100,100,91.8,100,100,99.4,98.8,100,99.4],"ind":{"CDR":1},"last":{}},{"s":"HYNDUH04","x":"Duc Hop","n":1,"st":"11111111011","m":[98.8,100,100,100,100,98.8,100,100,89.5,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNDUH05","x":"Duc Hop","n":1,"st":"11111101111","m":[100,98.8,100,100,98.2,97,93,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNHCG06","x":"Hiep Cuong","n":1,"st":"11111101111","m":[100,99.4,100,99.4,100,100,89.5,100,100,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNHCU04","x":"Hong Chau","n":1,"st":"11111111110","m":[100,100,100,100,100,100,100,100,100,100,86],"ind":{"DKD":1},"last":{"DKD":97.5}},{"s":"HYNHHT06","x":"Hoang Hoa Tham","n":1,"st":"11111111011","m":[98.8,100,100,96.5,96.5,100,96.5,100,93,100,96.5],"ind":{"PRB_DL":1},"last":{}},{"s":"HYNHHT09","x":"Hoang Hoa Tham","n":1,"st":"11011111111","m":[100,100,93,100,100,100,100,100,100,100,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNHLG04","x":"Hoan Long","n":1,"st":"11111011111","m":[98.8,98.8,98.8,95.8,98.8,91.8,98.8,98.8,98.8,100,98.8],"ind":{"CSSR":1},"last":{}},{"s":"HYNHMH01","x":"Hong Minh","n":1,"st":"11111111011","m":[98.8,98.2,100,99.4,100,100,100,99.4,93,99.4,100],"ind":{"CDR":1},"last":{}},{"s":"HYNHMH03","x":"Hong Minh","n":1,"st":"11111111011","m":[99.4,100,100,100,100,99.4,100,98.8,93,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNHQG01","x":"Hong Quang","n":1,"st":"11011111111","m":[99.4,100,92.4,99.4,100,100,98.8,100,100,98.8,100],"ind":{"CDR":1},"last":{}},{"s":"HYNHQG02","x":"Hong Quang","n":1,"st":"11111111101","m":[99.4,100,99.4,100,100,100,100,100,98.2,91.2,100],"ind":{"CDR":1},"last":{}},{"s":"HYNLDO04","x":"Lac Dao","n":1,"st":"11011111111","m":[98.8,98.8,91.2,98.8,97.6,98.8,97.6,98.8,98.8,98.8,98.8],"ind":{"CDR":1},"last":{}},{"s":"HYNLDO05","x":"Lac Dao","n":1,"st":"11111111011","m":[95.8,99.4,95.8,97.6,98.8,97,98.8,98.8,90,98.2,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNLHG04","x":"Long Hung","n":1,"st":"11111110111","m":[100,100,100,100,100,100,100,84.8,98.8,100,98.8],"ind":{"DKD":1},"last":{}},{"s":"HYNLHG10","x":"Long Hung","n":1,"st":"10111111111","m":[100,88.3,98.8,100,100,100,98.8,100,98.8,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNLLI01","x":"Le Loi","n":1,"st":"11111011111","m":[100,100,98.8,99.4,99.4,86,98.8,100,100,99.4,100],"ind":{"DKD":1},"last":{}},{"s":"HYNLLI02","x":"Le Loi","n":1,"st":"11101111111","m":[100,100,100,92.4,98.8,100,100,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNLLI03","x":"Le Loi","n":1,"st":"11101111111","m":[100,100,100,86,100,100,99.4,99.4,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNLQD01","x":"Le Quy Don","n":1,"st":"11111111011","m":[100,100,100,100,100,100,100,100,89.5,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNMHO01","x":"My Hao","n":1,"st":"11111101111","m":[98.2,98.8,98.8,98.8,100,100,86,100,98.2,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNMHO11","x":"My Hao","n":1,"st":"11111101111","m":[100,100,100,100,99.4,100,73.7,100,99.4,100,100],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNMHO13","x":"My Hao","n":1,"st":"11111111011","m":[98.8,98.8,100,98.8,98.8,98.8,98.8,98.8,91.8,98.8,98.8],"ind":{"CSSR":1},"last":{}},{"s":"HYNMHO15","x":"My Hao","n":1,"st":"01111111111","m":[84.8,100,100,100,100,97,99.4,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNMSO05","x":"Me So","n":1,"st":"11111111101","m":[98.8,100,97,100,98.8,97,98.8,98.8,98.8,81.8,98.8],"ind":{"DKD":1},"last":{}},{"s":"HYNNCG02","x":"Nam Cuong","n":1,"st":"11111111011","m":[100,100,100,100,99.4,100,100,99.4,85.4,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNDN02","x":"Nghia Dan","n":1,"st":"11110111111","m":[100,98.8,100,99.4,91.8,98.8,95.8,98.8,97.6,100,98.8],"ind":{"CSSR":1},"last":{}},{"s":"HYNNDU01","x":"Nguyen Du","n":1,"st":"11111111011","m":[100,100,100,100,100,100,100,100,85.4,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNDU02","x":"Nguyen Du","n":1,"st":"11111111110","m":[100,100,100,100,99.4,100,100,99.4,100,100,93],"ind":{"CDR":1},"last":{"CDR":0.53}},{"s":"HYNNQH04","x":"Nhu Quynh","n":1,"st":"01111111111","m":[86,100,100,100,96.5,99.4,100,100,99.4,100,99.4],"ind":{"DKD":1},"last":{}},{"s":"HYNNQH11","x":"Nhu Quynh","n":1,"st":"11111101111","m":[100,99.4,99.4,98.8,99.4,99.4,91.8,98.2,98.2,100,99.4],"ind":{"CDR":1},"last":{}},{"s":"HYNNQH12","x":"Nhu Quynh","n":1,"st":"11101111111","m":[98.8,96.4,98.2,93,98.8,97.6,99.4,98.2,97,98.8,99.4],"ind":{"CDR":1},"last":{}},{"s":"HYNNQH17","x":"Nhu Quynh","n":1,"st":"01111111111","m":[86,100,100,100,100,98.8,97,100,100,98.2,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNTE02","x":"Ngu Thien","n":1,"st":"11111111101","m":[98.2,98.8,98.8,98.8,98.8,100,98.8,98.8,100,93,100],"ind":{"CDR":1},"last":{}},{"s":"HYNNTG04","x":"Nam Tien Hung","n":1,"st":"11101111111","m":[100,100,100,92.4,100,100,100,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNNTG05","x":"Nam Tien Hung","n":1,"st":"11111101111","m":[100,100,100,100,98.8,98.8,93,100,100,98.8,100],"ind":{"CDR":1},"last":{}},{"s":"HYNNTH05","x":"Nam Tien Hai","n":1,"st":"11110111111","m":[98.8,100,100,100,91.8,100,100,99.4,99.4,99.4,100],"ind":{"CDR":1},"last":{}},{"s":"HYNNTI02","x":"Nguyen Trai","n":1,"st":"11111101111","m":[100,100,99.4,100,100,98.8,86,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNTI03","x":"Nguyen Trai","n":1,"st":"11111101111","m":[100,100,98.8,100,99.4,100,85.4,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNTI04","x":"Nguyen Trai","n":1,"st":"01111111111","m":[86,100,98.8,100,98.8,100,100,100,98.8,100,99.4],"ind":{"DKD":1},"last":{}},{"s":"HYNNTN01","x":"Nam Thai Ninh","n":1,"st":"11101111111","m":[97.6,100,98.8,91.8,98.8,98.8,100,98.8,98.8,98.2,98.8],"ind":{"CDR":1},"last":{}},{"s":"HYNNTU29","x":"Nghia Tru","n":1,"st":"11111111101","m":[98.8,98.2,95.8,98.2,95.8,98.8,97.6,97.6,97.6,91.2,98.2],"ind":{"CDR":1},"last":{}},{"s":"HYNNTU31","x":"Nghia Tru","n":1,"st":"01111111111","m":[84.2,97,98.2,98.2,98.2,98.8,98.8,98.2,97.6,98.2,98.8],"ind":{"DKD":1},"last":{}},{"s":"HYNNVL01","x":"Nguyen Van Linh","n":1,"st":"01111111111","m":[84.8,96.5,99.4,100,100,99.4,100,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNVL02","x":"Nguyen Van Linh","n":1,"st":"01111111111","m":[87.7,98.8,97.6,95.3,98.8,98.2,95.8,98.8,98.8,98.8,98.8],"ind":{"PASR":1},"last":{}},{"s":"HYNNVL03","x":"Nguyen Van Linh","n":1,"st":"01111111111","m":[89.5,100,100,100,100,100,100,100,100,100,100],"ind":{"PASR":1},"last":{}},{"s":"HYNNVL04","x":"Nguyen Van Linh","n":1,"st":"11111111011","m":[98.8,100,98.2,100,98.8,100,100,98.2,84.8,97,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNVL06","x":"Nguyen Van Linh","n":1,"st":"11111111011","m":[100,100,100,100,97,100,100,100,86,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNNVL08","x":"Nguyen Van Linh","n":1,"st":"11111111011","m":[99.4,100,100,99.4,99.4,100,100,100,75.5,100,99.4],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNNVL09","x":"Nguyen Van Linh","n":1,"st":"11111110111","m":[97.6,100,99.4,100,100,100,100,74.9,100,100,100],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNNVL10","x":"Nguyen Van Linh","n":1,"st":"11111110111","m":[100,100,100,100,100,100,100,79,96.5,100,100],"ind":{"CDR":1,"DKD":1},"last":{}},{"s":"HYNNVL11","x":"Nguyen Van Linh","n":1,"st":"01111111111","m":[93,100,96.5,100,100,97.6,98.8,100,100,100,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNNVL12","x":"Nguyen Van Linh","n":1,"st":"11111111011","m":[100,100,99.4,100,100,100,98.8,100,86,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNPCG04","x":"Phung Cong","n":1,"st":"11111011111","m":[98.8,98.8,99.4,98.8,98.8,86.5,98.8,98.8,98.8,97.6,99.4],"ind":{"PASR":1},"last":{}},{"s":"HYNPCG11","x":"Phung Cong","n":1,"st":"11111110111","m":[100,98.8,100,100,100,100,100,93,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNPCG12","x":"Phung Cong","n":1,"st":"11011111111","m":[100,98.8,86,100,100,98.8,100,99.4,100,100,98.2],"ind":{"DKD":1},"last":{}},{"s":"HYNPHN01","x":"Pho Hien","n":1,"st":"11110111111","m":[99.4,100,100,100,89.5,99.4,100,100,100,97,100],"ind":{"PASR":1},"last":{}},{"s":"HYNPHN06","x":"Pho Hien","n":1,"st":"10111111111","m":[100,93,99.4,100,100,100,100,100,100,100,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNPHN22","x":"Pho Hien","n":1,"st":"11111111101","m":[100,98.8,98.8,100,100,100,100,100,100,86,100],"ind":{"DKD":1},"last":{}},{"s":"HYNPHN23","x":"Pho Hien","n":1,"st":"11111111110","m":[100,100,100,100,100,100,100,98.8,100,100,86],"ind":{"DKD":1},"last":{"DKD":98.4}},{"s":"HYNQLH05","x":"Quang Lich","n":1,"st":"10111111111","m":[100,93,99.4,100,100,99.4,98.8,100,99.4,100,99.4],"ind":{"CSSR":1},"last":{}},{"s":"HYNQPU01","x":"Quynh Phu","n":1,"st":"11110111111","m":[100,100,100,100,93,100,100,100,100,100,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNSNM03","x":"Son Nam","n":1,"st":"01111111111","m":[75.5,99.4,100,100,100,100,100,100,100,100,100],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNSNM05","x":"Son Nam","n":1,"st":"11111111011","m":[100,100,100,100,98.8,100,100,100,93,99.4,100],"ind":{"PRB_DL":1},"last":{}},{"s":"HYNTBH11","x":"Thai Binh","n":1,"st":"11011111111","m":[98.8,98.8,74.9,100,100,100,100,99.4,100,100,100],"ind":{"PASR":1,"DKD":1},"last":{}},{"s":"HYNTHA03","x":"Tien Hoa","n":1,"st":"11111110111","m":[100,100,100,99.4,100,100,100,84.8,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTHD08","x":"Tran Hung Dao","n":1,"st":"11101111111","m":[100,100,100,93,98.2,100,98.8,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTHG01","x":"Thuong Hong","n":1,"st":"11111110111","m":[100,99.4,98.8,99.4,97,100,98.8,83.6,99.4,99.4,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTHG03","x":"Thuong Hong","n":1,"st":"11110111111","m":[98.8,98.8,98.8,100,90.6,97,98.2,98.8,98.8,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTHG05","x":"Thuong Hong","n":1,"st":"11111101111","m":[97,100,100,100,100,98.2,89.4,100,99.4,99.4,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTHG06","x":"Thuong Hong","n":1,"st":"11111101111","m":[98.8,98.8,100,100,98.8,100,88.8,98.8,98.8,95.8,98.8],"ind":{"CSSR":1},"last":{}},{"s":"HYNTHI07","x":"Tien Hai","n":1,"st":"11111101111","m":[100,100,100,100,99.4,100,86,100,100,97.6,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTHU02","x":"Tan Hung","n":1,"st":"11111111110","m":[100,100,98.8,100,100,98.8,100,100,100,100,86],"ind":{"DKD":1},"last":{"DKD":97.38}},{"s":"HYNTHU03","x":"Tan Hung","n":1,"st":"01111111111","m":[86,100,100,100,100,100,100,99.4,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTHU06","x":"Tan Hung","n":1,"st":"01111111111","m":[86,100,100,100,100,100,100,100,100,99.4,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTHU07","x":"Tan Hung","n":1,"st":"11111101111","m":[100,100,100,100,100,100,86,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTIT02","x":"Tien Tien","n":1,"st":"11111101111","m":[100,100,98.8,98.8,98.8,100,84.8,98.8,98.8,98.8,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTKE04","x":"Than Khe","n":1,"st":"11111011111","m":[97.6,100,100,100,100,90.6,100,98.8,100,100,99.4],"ind":{"CDR":1},"last":{}},{"s":"HYNTLM02","x":"Tran Lam","n":1,"st":"11111101111","m":[95.9,98.8,100,100,99.4,100,91.8,98.8,100,100,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNTLM07","x":"Tran Lam","n":1,"st":"10111111111","m":[100,93,100,98.8,100,100,100,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTLM09","x":"Tran Lam","n":1,"st":"10111111111","m":[100,91.2,100,100,100,100,100,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTLM25","x":"Tran Lam","n":1,"st":"11111111110","m":[98.8,100,100,100,100,100,100,100,100,100,93],"ind":{"CDR":1},"last":{"CDR":0.53}},{"s":"HYNTLU01","x":"Tien Lu","n":1,"st":"01111111111","m":[86,100,100,100,100,97,100,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTLU03","x":"Tien Lu","n":1,"st":"11111111101","m":[100,100,100,100,100,100,100,100,100,93,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNTLU05","x":"Tien Lu","n":1,"st":"11111110111","m":[100,100,100,100,100,100,100,86,99.4,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTLY09","x":"Tra Ly","n":1,"st":"11101111111","m":[100,100,100,92.4,100,100,100,100,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTLY10","x":"Tra Ly","n":1,"st":"01111111111","m":[91.8,97,100,97,97,97,100,100,97,97,100],"ind":{"PRB_DL":1},"last":{}},{"s":"HYNTTA03","x":"Tay Thuy Anh","n":1,"st":"11110111111","m":[100,98.8,100,98.2,93,98.8,98.8,98.8,100,100,98.8],"ind":{"CDR":1},"last":{}},{"s":"HYNTTI01","x":"Thu Tri","n":1,"st":"11110111111","m":[100,100,100,100,92.4,100,98.8,98.8,100,99.4,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTTI02","x":"Thu Tri","n":1,"st":"11111110111","m":[100,98.8,98.8,98.8,100,100,100,90,100,100,100],"ind":{"CDR":1},"last":{}},{"s":"HYNTTN01","x":"Tay Thai Ninh","n":1,"st":"10111111111","m":[100,86,100,100,100,100,100,100,97,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTTN04","x":"Tay Thai Ninh","n":1,"st":"10111111111","m":[100,84.8,100,100,99.4,100,100,100,99.4,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTTY01","x":"Thai Thuy","n":1,"st":"11111101111","m":[100,100,100,100,100,98.8,86,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTTY03","x":"Thai Thuy","n":1,"st":"11111101111","m":[100,100,100,100,100,100,86,100,98.8,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTTY09","x":"Thai Thuy","n":1,"st":"11111101111","m":[98.8,100,100,99.4,99.4,100,84.8,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTVU04","x":"Thu Vu","n":1,"st":"11111111110","m":[98.8,98.8,97.6,98.8,98.8,98.8,98.8,98.8,98.8,98.8,89.5],"ind":{"PASR":1},"last":{"PASR":98.97}},{"s":"HYNTVV01","x":"Trieu Viet Vuong","n":1,"st":"01111111111","m":[85.4,100,98.8,100,98.2,100,99.4,99.4,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNTVV08","x":"Trieu Viet Vuong","n":1,"st":"11111111110","m":[98.8,98.8,98.8,98.8,100,100,100,100,100,100,93],"ind":{"CSSR":1},"last":{"CSSR":98.59}},{"s":"HYNVGG06","x":"Van Giang","n":1,"st":"10111111111","m":[97,93,97,97,97,97,97,97,100,97,100],"ind":{"CDR":1},"last":{}},{"s":"HYNVTI02","x":"Vu Tien","n":1,"st":"11111111101","m":[100,100,98.8,100,100,100,100,100,100,93,100],"ind":{"CDR":1},"last":{}},{"s":"HYNVTI04","x":"Vu Tien","n":1,"st":"11011111111","m":[98.8,98.8,83.6,98.8,98.8,98.8,98.8,98.2,97.6,98.8,97.6],"ind":{"DKD":1},"last":{}},{"s":"HYNVTI06","x":"Vu Tien","n":1,"st":"11111111101","m":[100,100,100,98.2,100,100,100,100,100,93,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNVTU03","x":"Vu Thu","n":1,"st":"11111111011","m":[100,100,97.6,98.2,100,97,100,100,86,98.8,99.4],"ind":{"DKD":1},"last":{}},{"s":"HYNVTU06","x":"Vu Thu","n":1,"st":"10111111111","m":[100,84.2,100,100,99.4,100,98.8,100,100,100,99.4],"ind":{"CSSR":1,"CDR":1},"last":{}},{"s":"HYNVXN02","x":"Van Xuan","n":1,"st":"11111111101","m":[100,100,99.4,100,100,100,100,100,100,92.4,98.8],"ind":{"CDR":1},"last":{}},{"s":"HYNYMY01","x":"Yen My","n":1,"st":"11110111111","m":[98.8,98.8,95.8,95.8,90.6,95.8,98.8,98.8,98.2,98.8,98.8],"ind":{"PRB_DL":1},"last":{}},{"s":"HYNYMY02","x":"Yen My","n":1,"st":"01111111111","m":[93,100,100,100,100,100,100,100,98.2,98.8,100],"ind":{"CSSR":1},"last":{}},{"s":"HYNYMY04","x":"Yen My","n":1,"st":"11110111111","m":[100,100,100,100,89.5,100,100,98.2,100,100,98.8],"ind":{"PASR":1},"last":{}},{"s":"HYNYMY05","x":"Yen My","n":1,"st":"11110111111","m":[100,99.4,100,100,86,100,100,100,100,100,100],"ind":{"DKD":1},"last":{}},{"s":"HYNYMY09","x":"Yen My","n":1,"st":"11111111110","m":[100,100,100,100,98.8,100,98.8,100,100,100,86],"ind":{"DKD":1},"last":{"DKD":96.09}}],"boqua":["MC_STAON_NUM_R","VN_CSSR","VN_CALL_DROP"]},"vhkt":{"date":"11/11/2026","ev":[{"x":"Bac Tien Hung","c":"HYNBTH06_4G","s":"11/11/2026 17:06:42","e":"11/11/2026 17:23:50","m":17,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Bac Tien Hung","c":"HYNBTH02_4G","s":"11/11/2026 17:06:36","e":"11/11/2026 17:23:50","m":17,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Bac Tien Hung","c":"HYNBTH04_4G","s":"11/11/2026 17:06:33","e":"11/11/2026 17:23:50","m":17,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Bac Tien Hung","c":"HYNBTH03_4G","s":"11/11/2026 17:06:33","e":"11/11/2026 17:23:50","m":17,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Dong Tien Hung","c":"HYNDTH03_4G","s":"11/11/2026 17:06:33","e":"11/11/2026 17:23:50","m":17,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Hong Chau","c":"HYNHCU04_LN","s":"11/11/2026 16:59:36","e":"11/11/2026 17:44:17","m":45,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Pho Hien","c":"HYNPHN23_LN","s":"11/11/2026 16:59:36","e":"11/11/2026 17:44:17","m":45,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Tan Hung","c":"HYNTHU02_LN","s":"11/11/2026 16:59:36","e":"11/11/2026 17:44:17","m":45,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Hong Chau","c":"HYNHCU03_4G","s":"11/11/2026 16:59:31","e":"11/11/2026 17:44:17","m":45,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Hong Chau","c":"HYNHCU02_LN","s":"11/11/2026 16:58:08","e":"11/11/2026 17:44:17","m":46,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Hong Chau","c":"HYNHCU03","s":"11/11/2026 16:54:50","e":"11/11/2026 17:44:17","m":49,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Hong Chau","c":"HYNHCU04","s":"11/11/2026 16:54:50","e":"11/11/2026 17:44:17","m":49,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Tan Hung","c":"HYNTHU02","s":"11/11/2026 16:54:50","e":"11/11/2026 17:44:17","m":49,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Hong Chau","c":"HYNHCU02","s":"11/11/2026 16:53:36","e":"11/11/2026 17:44:17","m":51,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Pho Hien","c":"HYNPHN23","s":"11/11/2026 16:53:36","e":"11/11/2026 17:44:17","m":51,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU19","s":"11/11/2026 15:02:32","e":"11/11/2026 16:35:40","m":93,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU19_4G","s":"11/11/2026 14:59:39","e":"11/11/2026 16:35:24","m":96,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Yen My","c":"HYNYMY09","s":"11/11/2026 11:11:35","e":"11/11/2026 11:47:35","m":36,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Yen My","c":"HYNYMY09_4G","s":"11/11/2026 11:11:31","e":"11/11/2026 11:47:35","m":36,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Yen My","c":"HYNYMY09","s":"11/11/2026 11:07:04","e":"11/11/2026 11:47:21","m":40,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Dien Ha","c":"HYNDHA02_4G","s":"11/11/2026 10:52:33","e":"11/11/2026 14:08:57","m":196,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Dien Ha","c":"HYNDHA02","s":"11/11/2026 10:47:46","e":"11/11/2026 14:09:01","m":201,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT2","u":"UT3","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU01","s":"11/11/2026 09:57:01","e":"11/11/2026 10:10:18","m":13,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU01","s":"11/11/2026 09:55:54","e":"11/11/2026 10:10:16","m":14,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Chi Minh","c":"HYNCMH01_4G","s":"11/11/2026 09:17:51","e":"11/11/2026 10:37:59","m":80,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Yen My","c":"HYNYMY09_4G","s":"11/11/2026 09:17:11","e":"11/11/2026 09:25:09","m":8,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Chi Minh","c":"HYNCMH01","s":"11/11/2026 09:13:03","e":"11/11/2026 10:37:02","m":84,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU01","s":"11/11/2026 08:46:14","e":"11/11/2026 09:45:34","m":59,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Yen My","c":"HYNYMY09_4G","s":"11/11/2026 08:36:19","e":"11/11/2026 08:41:11","m":5,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Yen My","c":"HYNYMY09","s":"11/11/2026 08:35:55","e":"11/11/2026 08:41:11","m":5,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Pho Hien","c":"HYNPHN07","s":"11/11/2026 08:35:16","e":"11/11/2026 08:41:11","m":6,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU01","s":"11/11/2026 08:34:39","e":"11/11/2026 08:41:11","m":7,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Nghia Tru","c":"HYNNTU01","s":"11/11/2026 08:34:32","e":"11/11/2026 08:41:11","m":7,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT1","d":"Y"},{"x":"Yen My","c":"HYNYMY09","s":"11/11/2026 08:31:34","e":"11/11/2026 08:41:11","m":10,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT2","d":"Y"},{"x":"Nguyen Van Linh","c":"HYNNVL07_4G","s":"11/11/2026 08:12:15","e":"11/11/2026 08:32:43","m":20,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Nguyen Van Linh","c":"HYNNVL07","s":"11/11/2026 08:07:42","e":"11/11/2026 08:32:36","m":25,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Pho Hien","c":"HYNPHN07","s":"11/11/2026 07:08:02","e":"11/11/2026 08:28:51","m":81,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Pho Hien","c":"HYNPHN07","s":"11/11/2026 06:05:57","e":"11/11/2026 07:01:35","m":56,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Nguyen Van Linh","c":"HYNNVL07_4G","s":"11/11/2026 06:05:35","e":"11/11/2026 07:31:43","m":86,"n":"4G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Nguyen Van Linh","c":"HYNNVL07","s":"11/11/2026 06:00:56","e":"11/11/2026 07:31:39","m":91,"n":"3G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Pho Hien","c":"HYNPHN07","s":"11/11/2026 01:10:21","e":"11/11/2026 05:59:40","m":289,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"},{"x":"Pho Hien","c":"HYNPHN07","s":"11/11/2026 00:12:21","e":"11/11/2026 01:03:51","m":52,"n":"5G","to":"MBF_MB_HUNG_YEN_PVT_TVT1","u":"UT3","d":"Y"}]},"files":{"ngay":"Tỉnh_ngày\\0.Ngày.csv (12/11/2026 16:36)","thang":"Tỉnh_tháng\\2.Tháng.csv (12/11/2026 16:36)","kpi":"KPI\\1.KPI.csv (12/11/2026 16:21)","vhkt":"VHKT\\2.VHKT.csv (12/11/2026 15:47)"}}</script>
+<script>
+const D=JSON.parse(document.getElementById("data").textContent);
+const arr=v=>v==null?[]:Array.isArray(v)?v:[v];
+const THR=D.nguong;
+const nf=(v,d=2)=>v==null?"—":Number(v).toLocaleString("vi-VN",{maximumFractionDigits:d});
+const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e;};
+const $=id=>document.getElementById(id);
+const short=s=>s.slice(0,5);           // "dd/MM/yyyy" -> "dd/MM"
+const TINH=D.tinh==="Hung Yen"?"Hưng Yên":D.tinh;
+
+const DAILY=arr(D.daily), M=D.month, K=D.kpi, V=D.vhkt;
+const lastDay=DAILY.length?DAILY[DAILY.length-1].date:"";
+document.title="Giám sát MTCL "+TINH;
+$("crumb").textContent=`sMartF · 0.MTCL › 2026_V2 · Tỉnh ${TINH} · số liệu đến ngày ${lastDay} · tạo lúc ${D.taoLuc}`;
+$("h1").textContent="Giám sát MTCL "+TINH;
+$("lede").textContent=`Chỉ số MTCL_2026 theo ngày và lũy kế tháng, các trạm thường xuyên không đạt KPI trong tháng, và danh sách trạm cần xử lý ngày ${K.days[K.days.length-1]}. Ngưỡng đạt MTCL: ${nf(THR)}.`;
+$("thrLegend").textContent="Ngưỡng "+nf(THR);
+
+// (1) Daily line chart
+$("dailyTitle").textContent=`MTCL_2026 theo ngày, ${DAILY.length?DAILY[0].date.slice(3):""}`;
+const NS="http://www.w3.org/2000/svg";
+const sv=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+let lastW=0;
+function drawChart(){
+  const box=$("chart");const W=Math.max(320,box.clientWidth);if(W===lastW||!DAILY.length)return;lastW=W;box.innerHTML="";
+  const n=DAILY.length,narrow=W<560,every=Math.max(1,Math.ceil(n/(narrow?6:16))),H=narrow?240:300,L=34,R=14,T=22,B=30;
+  const lo=Math.min(THR,...DAILY.map(p=>p.m)),y0=Math.min(86,Math.floor((lo-1)/2)*2),y1=100,step=n>1?(W-L-R)/(n-1):0;
+  const xs=i=>n>1?L+step*i:(L+W-R)/2,ys=v=>T+(H-T-B)*(y1-v)/(y1-y0);
+  const s=sv("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"Biểu đồ MTCL_2026 theo ngày"});
+  for(let v=y0;v<=y1;v+=2){s.appendChild(sv("line",{x1:L,x2:W-R,y1:ys(v),y2:ys(v),stroke:"var(--grid)"}));
+    const t=sv("text",{x:L-6,y:ys(v)+4,"text-anchor":"end"});t.textContent=v;s.appendChild(t);}
+  DAILY.forEach((p,i)=>{if(i%every)return;const t=sv("text",{x:xs(i),y:H-8,"text-anchor":"middle"});t.textContent=short(p.date);s.appendChild(t);});
+  s.appendChild(sv("line",{x1:L,x2:W-R,y1:ys(THR),y2:ys(THR),stroke:"var(--thr)","stroke-width":2,"stroke-dasharray":"6 4"}));
+  const tl=sv("text",{x:W-R,y:ys(THR)+16,"text-anchor":"end",style:"fill:var(--thr);font-weight:600"});tl.textContent="Ngưỡng "+nf(THR);s.appendChild(tl);
+  s.appendChild(sv("path",{d:DAILY.map((p,i)=>(i?"L":"M")+xs(i)+","+ys(p.m)).join(""),fill:"none",stroke:"var(--accent)","stroke-width":2.5,"stroke-linejoin":"round"}));
+  const tip=el("div","tip");tip.hidden=true;const hw=n>1?step:W-L-R;
+  DAILY.forEach((p,i)=>{const bad=p.m<THR;
+    s.appendChild(sv("circle",{cx:xs(i),cy:ys(p.m),r:bad?6:4.5,fill:bad?"var(--bad)":"var(--surface)",stroke:bad?"var(--bad)":"var(--accent)","stroke-width":2}));
+    if(bad||i%every===0){const lb=sv("text",{x:xs(i),y:bad?ys(p.m)+20:ys(p.m)-10,"text-anchor":"middle",style:bad?"fill:var(--bad);font-weight:600":"fill:var(--ink)"});
+      lb.textContent=nf(p.m);s.appendChild(lb);}
+    const hit=sv("rect",{x:xs(i)-hw/2,y:T,width:hw,height:H-T-B,fill:"transparent",tabindex:0});
+    const show=()=>{tip.hidden=false;tip.style.left=Math.min(Math.max(xs(i)/W*100,12),88)+"%";tip.style.top=(ys(p.m)/H*box.clientHeight)+"px";
+      tip.innerHTML="";tip.append(el("div",null,p.date+" · "+(bad?"DƯỚI NGƯỠNG":"ĐẠT")));
+      [["MTCL_2026",p.m],["HTMT_KPI",p.k],["HTMT_QOS",p.q],["HTMT_VHKT",p.v],["Tỷ lệ xã đạt",p.x]].forEach(([k,v])=>{const r=el("div",null,k+": ");r.append(el("b",null,nf(v)));tip.append(r);});};
+    hit.addEventListener("mouseenter",show);hit.addEventListener("focus",show);hit.addEventListener("touchstart",show,{passive:true});
+    hit.addEventListener("mouseleave",()=>tip.hidden=true);hit.addEventListener("blur",()=>tip.hidden=true);
+    s.appendChild(hit);});
+  box.append(s,tip);
+}
+drawChart();new ResizeObserver(drawChart).observe($("chart"));
+const below=DAILY.filter(p=>p.m<THR);
+$("dailyNote").textContent=`${DAILY.length-below.length}/${DAILY.length} ngày đạt ngưỡng.`+(below.length?" Dưới ngưỡng: "+below.map(p=>`${short(p.date)} (${nf(p.m)}, HTMT_KPI ${nf(p.k)}, QOS ${nf(p.q)}, VHKT ${nf(p.v)})`).join("; ")+".":"");
+
+// (2) Month-to-date
+const tile=(host,[l,v,s,cls])=>{const t=el("div","tile"+(cls?" "+cls:""));t.append(el("span","lab",l),el("span","val num",v),el("span","sub",s));host.append(t);};
+$("monthTitle").textContent="Lũy kế tháng "+M.thang;
+const mOk=M.m>=THR;
+[["MTCL_2026 lũy kế",nf(M.m),`Ngưỡng ${nf(THR)} · ${mOk?"ĐẠT":"KHÔNG ĐẠT"}`,mOk?"lead":"leadbad"],["Tỷ lệ xã/phường đạt",nf(M.x)+"%",nf(M.n,0)+" xã/phường"],
+ ["HTMT_KPI",nf(M.k),""],["HTMT_QOS",nf(M.q),""],["HTMT_VHKT",nf(M.v),""],["HTMT_ANM",nf(M.a),""]].forEach(t=>tile($("tiles"),t));
+const R=M.rank;
+$("rankNote").textContent=R?`${TINH} xếp thứ ${R.pos}/${R.total} tỉnh ${R.mien.replace("Mien Bac","Miền Bắc").replace("Mien Nam","Miền Nam").replace("Mien Trung","Miền Trung")} về MTCL lũy kế tháng`+
+  (arr(R.above).length?", sau "+arr(R.above).map(a=>`${a[0]} (${nf(a[1])})`).join(", ")+".":"."):
+  "Muốn xem thứ hạng so với các tỉnh khác: khi xuất báo cáo Tháng, chọn Tỉnh = Mobifone (tất cả tỉnh).";
+
+// (3) Stations failing KPI often
+const LBL={CSSR:"CSSR",PASR:"PASR",CDR:"CDR",PADR:"PADR",HOSR:"HOSR",PRB_DL:"PRB DL",DKD:"DKD",BADLINK_4G:"BADLINK 4G",VN_CSSR:"VN CSSR",VN_CALL_DROP:"VN CALL DROP",MC_STAON_NUM_R:"MC_STAON_NUM_R",USR_DL_THP_4G:"USER DL THP 4G",USR_DL_THP_5G:"USER DL THP 5G",RSRP:"RSRP"};
+// NHÓM CHỈ TIÊU — sửa ở đây nếu muốn chia nhóm khác
+const GROUPS=[
+  {id:"kpi",name:"KPI",keys:["CSSR","PASR","CDR","PADR","HOSR","PRB_DL","DKD","BADLINK_4G"]},
+  {id:"qos",name:"QoS",keys:["USR_DL_THP_4G","USR_DL_THP_5G","RSRP"]}];
+LBL.USR_DL_THP_4G="4G_USR_DL_THP";LBL.USR_DL_THP_5G="5G_USR_DL_THP";LBL.BADLINK_4G="Badlink";
+const GOF={};GROUPS.forEach((g,i)=>g.keys.forEach(k=>GOF[k]=i));
+const gIdx=k=>GOF[k]??GROUPS.length;
+const byGroup=(a,b)=>gIdx(a[0])-gIdx(b[0])||b[1]-a[1];
+// filter value: "g:<id>" = whole group, otherwise one indicator key
+const match=(f,obj)=>!f||(f.startsWith("g:")?GROUPS.find(g=>"g:"+g.id===f).keys.some(k=>k in obj):f in obj);
+function groupChips(host,counts,unit,cur,set){
+  host.innerHTML="";
+  GROUPS.forEach(g=>{const ks=g.keys.filter(k=>counts[k]);if(!ks.length)return;
+    const on=cur==="g:"+g.id;
+    const box=el("div","gbox"+(on?" on":""));
+    const gb=el("button","gchip",g.name);gb.type="button";gb.setAttribute("aria-pressed",String(on));
+    gb.title="Lọc tất cả chỉ tiêu nhóm "+g.name;gb.onclick=()=>set(on?null:"g:"+g.id);
+    const inner=el("div","ginner");
+    ks.sort((a,b)=>counts[b]-counts[a]).forEach(k=>{const b=el("button","fchip",(LBL[k]||k)+" · "+counts[k]+unit);b.type="button";
+      b.setAttribute("aria-pressed",String(cur===k));b.onclick=()=>set(cur===k?null:k);inner.append(b);});
+    box.append(gb,inner);host.append(box);});
+}
+const DAYS=arr(K.days), ND=DAYS.length, LAST=ND-1;
+$("kmSrc").textContent=`TRẠM › KPI › Ngày · ${DAYS[0]} – ${DAYS[LAST]}`;
+const bq=arr(K.boqua);
+$("kmDef").textContent="Một trạm bị tính không đạt trong ngày khi có ít nhất một chỉ tiêu có điểm quy đổi bằng 0."+(bq.length?" Không tính chỉ tiêu "+bq.join(", ")+".":"");
+$("stripHead").textContent=short(DAYS[0])+" → "+short(DAYS[LAST]);
+const ST=arr(K.st).map(r=>{const m=arr(r.m),ms=m.filter(v=>v!=null);return {...r,m,ind:r.ind||{},last:r.last||{},avg:ms.length?ms.reduce((a,b)=>a+b,0)/ms.length:null};});
+const cntN=n=>ST.filter(r=>r.n>=n).length;
+[["Trạm có ngày không đạt",nf(ST.length),"trên "+K.total+" trạm ("+nf(ST.length/K.total*100,1)+"%)"],
+ ["Không đạt từ 3 ngày",nf(cntN(3)),"thường xuyên","alert"],
+ ["Không đạt từ 5 ngày",nf(cntN(5)),"","alert"],
+ ["Không đạt cả "+ND+" ngày",nf(cntN(ND)),"chưa có ngày nào đạt","alert"]].forEach(t=>tile($("mtiles"),t));
+[[1,"từ 1 ngày"],[3,"từ 3 ngày"],[5,"từ 5 ngày"],[ND,"cả "+ND+" ngày"]].filter((o,i,a)=>o[0]<=ND&&a.findIndex(x=>x[0]===o[0])===i)
+  .forEach(([v,t])=>{const o=el("option",null,t);o.value=v;if(v===Math.min(3,ND))o.selected=true;$("mmin").append(o);});
+function vbars(host,items,max){host.innerHTML="";items.forEach(([lab,v,hot])=>{const c=el("div","c"+(hot?" hot":""));c.title=lab+": "+v+" trạm";
+  const w=el("div","w"),b=el("div","b");b.style.height=(max?v/max*100:0)+"%";w.append(b);c.append(el("span","t",v),w,el("span","l",lab));host.append(c);});}
+const dz=arr(K.dayZero);
+vbars($("dayBars"),dz.map((v,i)=>[short(DAYS[i]).slice(0,2),v]),Math.max(...dz));
+const dist=Array.from({length:ND},(_,i)=>[String(i+1),ST.filter(r=>r.n===i+1).length,i+1>=5]);
+vbars($("distBars"),dist,Math.max(...dist.map(d=>d[1])));
+const indTot=Object.entries(K.dayInd||{}).map(([k,a])=>[k,arr(a).reduce((s,v)=>s+v,0)]).filter(e=>e[1]>0).sort(byGroup);
+const imax=Math.max(1,...indTot.map(e=>e[1]));
+// stations failing per group (any key of the group zero on any day)
+const gSt=GROUPS.map(g=>ST.filter(r=>g.keys.some(k=>k in r.ind)).length);
+GROUPS.forEach((g,gi)=>{const items=indTot.filter(e=>gIdx(e[0])===gi);if(!items.length)return;
+  const box=el("div","gbox col");
+  const h=el("div","hg");h.append(el("span","gname",g.name),el("span","num",gSt[gi]+" trạm · "+items.reduce((s,e)=>s+e[1],0)+" lượt"));box.append(h);
+  items.forEach(([k,v])=>{const r=el("div","hb");const tr=el("div","tr"),f=el("div","f");f.style.width=(v/imax*100)+"%";tr.append(f);
+    r.append(el("span",null,LBL[k]||k),tr,el("span","v num",v));r.title=(LBL[k]||k)+": "+v+" lượt trạm-ngày bị điểm 0";box.append(r);});
+  $("indBars").append(box);});
+let mf=null;
+function renderM(){
+  const min=+$("mmin").value,term=$("mq").value.trim().toLowerCase();
+  const base=ST.filter(r=>r.n>=min);const c={};base.forEach(r=>Object.keys(r.ind).forEach(k=>c[k]=(c[k]||0)+1));
+  groupChips($("mchips"),c," trạm",mf,v=>{mf=v;renderM();});
+  const rows=base.filter(r=>match(mf,r.ind)&&(!term||r.s.toLowerCase().includes(term)||r.x.toLowerCase().includes(term))).sort((a,b)=>b.n-a.n||(a.avg??0)-(b.avg??0));
+  const tb=$("mtb");tb.innerHTML="";
+  rows.forEach(r=>{const tr=tb.insertRow();
+    tr.insertCell().append(el("span","site",r.s));tr.insertCell().textContent=r.x;
+    const n=tr.insertCell();n.className="n num days"+(r.n>=5?" hi":"");n.textContent=r.n+"/"+ND;
+    const strip=el("div","strip");strip.setAttribute("aria-label",`Không đạt ${r.n} trên ${ND} ngày`);
+    [...r.st].forEach((ch,i)=>{const q=el("i",ch==="0"?"z":ch==="1"?"o":"");q.title=short(DAYS[i])+": "+(ch==="0"?"không đạt":ch==="1"?"đạt":"không có số liệu")+(r.m[i]!=null?" · MTCL "+nf(r.m[i]):"");strip.append(q);});
+    tr.insertCell().append(strip);
+    const a=tr.insertCell();a.className="n num"+(r.avg!=null&&r.avg<THR?" low":"");a.textContent=nf(r.avg,1);
+    const w=el("div","chips");Object.entries(r.ind).sort(byGroup).forEach(([k,v])=>{const ch=el("span","chip",(LBL[k]||k)+" ");ch.append(el("b",null,v+"n"));ch.title=(LBL[k]||k)+": điểm 0 trong "+v+" ngày";w.append(ch);});
+    tr.insertCell().append(w);});
+  $("mcount").textContent=rows.length+" trạm";
+}
+$("mq").addEventListener("input",renderM);$("mmin").addEventListener("change",renderM);renderM();
+
+// (4) Yesterday zero-score stations
+const Y=ST.filter(r=>r.st[LAST]==="0");
+$("kpi0Title").textContent="Trạm có điểm quy đổi KPI bằng 0 ngày "+DAYS[LAST];
+$("kpiNote").textContent=`${Y.length} trên ${K.total} trạm có ít nhất một chỉ tiêu bị điểm quy đổi 0 ngày ${DAYS[LAST]}. Cột “Ngày không đạt trong tháng” cho biết trạm đó là lỗi mới hay lặp lại.`;
+let kf=null;
+function renderK(){
+  const c={};Y.forEach(r=>Object.keys(r.last).forEach(k=>c[k]=(c[k]||0)+1));
+  groupChips($("kchips"),c," trạm",kf,v=>{kf=v;renderK();});
+  const term=$("kq").value.trim().toLowerCase();
+  const rows=Y.filter(r=>match(kf,r.last)&&(!term||r.s.toLowerCase().includes(term)||r.x.toLowerCase().includes(term))).sort((a,b)=>b.n-a.n||a.m[LAST]-b.m[LAST]);
+  const tb=$("ktb");tb.innerHTML="";
+  rows.forEach(r=>{const tr=tb.insertRow();
+    tr.insertCell().append(el("span","site",r.s));tr.insertCell().textContent=r.x;
+    const m=tr.insertCell();m.className="n num"+(r.m[LAST]<THR?" low":"");m.textContent=nf(r.m[LAST]);
+    const n=tr.insertCell();n.className="n num days"+(r.n>=5?" hi":"");n.textContent=r.n+"/"+ND;
+    const w=el("div","chips");Object.entries(r.last).sort(byGroup).forEach(([key,raw])=>{const ch=el("span","chip",(LBL[key]||key)+" ");ch.append(el("b",null,raw==null?"trống":nf(raw)));w.append(ch);});
+    tr.insertCell().append(w);});
+  $("kcount").textContent=rows.length+" trạm";
+}
+$("kq").addEventListener("input",renderK);renderK();
+
+// (5) VHKT rated N
+const evs=arr(V.ev),N=evs.filter(e=>e.d==="N");
+$("vhTitle").textContent="Trạm VHKT có đánh giá N ngày "+V.date;
+if(!N.length){$("vbody").append(el("div","empty",`Không có trạm nào bị đánh giá N ngày ${V.date}. Cả ${evs.length} sự kiện mất liên lạc trong ngày đều được đánh giá Y (đạt).`));}
+else{const t=el("div","tbl"),tb=el("table"),th=tb.createTHead().insertRow();
+  ["Cell/Trạm","Xã/Phường","Mạng","Bắt đầu","Kết thúc","Phút","Ưu tiên","Tổ xử lý"].forEach(h=>th.append(el("th",null,h)));
+  const body=tb.createTBody();N.forEach(e=>{const r=body.insertRow();const c0=r.insertCell();c0.className="site";c0.textContent=e.c;
+    [e.x,e.n,e.s,e.e].forEach(v=>r.insertCell().textContent=v);const m=r.insertCell();m.className="n num low";m.textContent=e.m;
+    [e.u,(e.to||"").replace("MBF_MB_HUNG_YEN_PVT_","")].forEach(v=>r.insertCell().textContent=v);});
+  t.append(tb);$("vbody").append(el("p","note",N.length+" sự kiện bị đánh giá N:"),t);}
+document.querySelector("#vall summary").textContent=`Xem toàn bộ ${evs.length} sự kiện mất liên lạc ngày ${V.date}`;
+evs.forEach(e=>{const r=$("vtb").insertRow();const c0=r.insertCell();c0.className="site";c0.textContent=e.c;
+  [e.x,e.n,(e.s||"").split(" ")[1],(e.e||"").split(" ")[1]].forEach(v=>r.insertCell().textContent=v);
+  const m=r.insertCell();m.className="n num";m.textContent=e.m;
+  [e.u,(e.to||"").replace("MBF_MB_HUNG_YEN_PVT_",""),e.d].forEach(v=>r.insertCell().textContent=v);});
+
+// Footer: source files
+const F=D.files;
+$("foot").append(el("div",null,"Tạo bằng TaoDashboard.ps1 lúc "+D.taoLuc+" từ các file CSV xuất từ sMartF:"));
+[["Tỉnh theo ngày",F.ngay],["Tỉnh theo tháng",F.thang],["Trạm KPI",F.kpi],["Trạm VHKT",F.vhkt]].forEach(([k,v])=>$("foot").append(el("div",null,"• "+k+": Data\\"+v)));
+</script>
+</body>
+</html>
